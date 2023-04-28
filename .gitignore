@@ -2,3 +2,4 @@ backend/venv
 .gitignore
 backend/__pycache__/*
 .gitignore
+frontend/node_modules/*

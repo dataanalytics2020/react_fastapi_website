@@ -16,12 +16,25 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from datetime import date, timedelta
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
-scraper = Scraper()
+
+origins = [
+    "http://localhost:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
-
+scraper = Scraper()
 
 
 # @app.get("/{serch_date}-{serch_tenpo_name}-data/",response_class=HTMLResponse)
@@ -32,9 +45,25 @@ def removal_text(text):
     text = text.translate(str.maketrans( '', '',string.punctuation  + '！'+ '　'+ ' '+'・'+'～' + '‐'))
     return text
 
+@app.get("/{target_day}-{serch_tenpo_name}-data/")
+def get_one_target_day(serch_tenpo_name:str,target_day:str,request: Request):
+    search_url  = f"https://ana-slo.com/{target_day}-{serch_tenpo_name}-data/"
+    res = requests.get(search_url)
+    soup = BeautifulSoup(res.text, "lxml")
+    elem = soup.select('#all_data_block')
+    dfs = pd.read_html(str(elem))
+    for tmp_df in dfs:
+        if '機種名' in list(tmp_df.columns):
+            tmp_df['店舗名'] = serch_tenpo_name
+            tmp_df['日付'] = target_day
+    tmp_df['差枚'] =tmp_df['差枚'].astype(int)
+    tmp_df['G数'] =tmp_df['G数'].astype(int)
+    tmp_df = tmp_df.reset_index()
+    tmp_df_json = tmp_df.to_json()
+    return {"tmp_df_json":tmp_df_json ,"search_url":search_url}#"concat_df_html":tmp_df_json ,"request": request,"serch_tenpo_name":serch_tenpo_name,"target_day":target_day
 
-@app.get("/{serch_tenpo_name}-{target_n_day}-{n_times}/",response_class=HTMLResponse)
-async def search_google(serch_tenpo_name,target_n_day,n_times, request: Request):
+@app.get("/{serch_tenpo_name}-{target_n_day}-{n_times}-data/",response_class=HTMLResponse)
+def search_google(serch_tenpo_name,target_n_day,n_times, request: Request):
     from datetime import date, timedelta
     target_number = str(target_n_day)
     print()
@@ -74,7 +103,6 @@ async def search_google(serch_tenpo_name,target_n_day,n_times, request: Request)
 
     concat_df_list = []
     for search_response,date in zip(results, target_day_list):
-        
         soup = BeautifulSoup(search_response.text, "lxml")
         elem = soup.select('#all_data_block')
         dfs = pd.read_html(str(elem))
@@ -94,18 +122,12 @@ async def search_google(serch_tenpo_name,target_n_day,n_times, request: Request)
     concat_df['G数'] =concat_df['G数'].astype(int)
     concat_df = concat_df.reset_index()
     concat_df_html = concat_df.to_html(index=False)
-     
     return  concat_df_html
 
-@app.get("/", response_class=HTMLResponse)
-def get_product(request: Request):
-    return templates.TemplateResponse(
-            "index.html",
-            {
-                "request": requests
-            }
-        )
-    
-@app.get("/hello/", response_class=HTMLResponse)
-async def hello(request: Request):
-   return templates.TemplateResponse("hello.html", {"request": request})
+@app.get("/")
+def Hello():
+    return {"Hello":"World!"}
+# async def get_product(request: Request):
+#     return templates.TemplateResponse("index.html",{"request": request})
+  
+#2023-04-27-レイトギャップ平和島-data
